@@ -1,0 +1,88 @@
+#define BLYNK_TEMPLATE_ID "Your tempalate id"
+#define BLYNK_DEVICE_NAME "Your device name"
+#define BLYNK_AUTH_TOKEN "Your Token"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+char ssid[] = "WiFi ssid";
+char pass[] = "Your WiFi Password";
+
+// Pin Assignments
+#define MOISTURE_SENSOR_PIN 33
+#define RELAY_PIN 4
+
+BlynkTimer timer;
+
+int plantType = 0;
+int moistureThreshold = 30; // Default for Aloe Vera
+
+// V1 = Button for pump control
+// V2 = Plant selection
+// V3 = Moisture health message
+// V4 = Plant-specific tip
+
+// 🌿 Thresholds for each plant
+int thresholds[] = {30, 60, 50, 55, 45};
+
+// 💡 Plant tips
+String plantTips[] = {
+  "🌵 Aloe Vera: Nitrogen fert. every 2 months.",
+  "🌱 Mint: Organic compost bi-weekly.",
+  "🌼 Spider Plant: Balanced fert. monthly.",
+  "🌿 Tulsi: Compost every 20 days.",
+  "🪴 Money Plant: Liquid fert. monthly."
+};
+
+BLYNK_WRITE(V1) {
+  int state = param.asInt();
+  digitalWrite(RELAY_PIN, state == 1 ? LOW : HIGH); // Relay is active LOW
+}
+
+BLYNK_WRITE(V2) {
+  plantType = param.asInt();
+
+  // Set moisture threshold for selected plant
+  if (plantType >= 0 && plantType <= 4) {
+    moistureThreshold = thresholds[plantType];
+    sendMoistureStatus(); // Immediately update moisture health
+    sendPlantTip();       // Immediately update tip
+  }
+}
+
+void sendMoistureStatus() {
+  int raw = analogRead(MOISTURE_SENSOR_PIN);
+  int percent = map(raw, 0, 4095, 100, 0);
+
+  if (percent < moistureThreshold) {
+    Blynk.virtualWrite(V3, "💧 Soil is dry! Water your plant.");
+  } else {
+    Blynk.virtualWrite(V3, "✅ Soil moisture is healthy.");
+  }
+}
+
+void sendPlantTip() {
+  if (plantType >= 0 && plantType <= 4) {
+    Blynk.virtualWrite(V4, plantTips[plantType]);
+  }
+}
+
+void checkMoistureLoop() {
+  sendMoistureStatus();
+  sendPlantTip();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // Pump OFF by default
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  timer.setInterval(10000L, checkMoistureLoop); // Repeat every 10s
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
